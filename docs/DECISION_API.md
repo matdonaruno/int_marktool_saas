@@ -133,6 +133,18 @@ await callDecisionApi(`/v1/decisions/${verdict.decisionId}/outcomes`, {
 
 ## 5. デプロイと運用（**人間が実行**。AI はハーネスでブロックされる）
 
+**最短手順（推奨）**: Google Cloud Shell（ブラウザで開くだけ・ログイン済み）で次の2行。§5.1〜5.3 を1コマンドで行い、最後に muse に入れる URL とキーを表示する。
+
+```bash
+git clone https://github.com/matdonaruno/int_marktool_saas && cd int_marktool_saas
+```
+
+```bash
+PROJECT_ID=<PROJECT_ID> bash deploy/decision-api/bootstrap.sh
+```
+
+以下は個別に実行したい場合の内訳。
+
 ### 5.1 初回のみ: GCP の準備
 
 ```bash
