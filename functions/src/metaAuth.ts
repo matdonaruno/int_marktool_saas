@@ -3,6 +3,7 @@ import { defineSecret } from "firebase-functions/params";
 import * as admin from "firebase-admin";
 import { encryptToken } from "./utils/cryptoHelper";
 import { META_BASE_URL } from "./utils/metaApiClient";
+import { fetchWithTimeout } from "./utils/fetchWithTimeout";
 
 if (!admin.apps.length) {
   admin.initializeApp();
@@ -56,7 +57,7 @@ export const connectMetaAccount = onCall(
     exchangeUrl.searchParams.append("client_secret", metaAppSecret.value());
     exchangeUrl.searchParams.append("fb_exchange_token", shortLivedToken);
 
-    const tokenRes = await fetch(exchangeUrl.toString());
+    const tokenRes = await fetchWithTimeout(exchangeUrl.toString());
     const tokenData = (await tokenRes.json()) as MetaTokenResponse;
     if (!tokenRes.ok || !tokenData.access_token) {
       throw new HttpsError("internal", "Meta長期トークンの取得に失敗しました。");
@@ -67,8 +68,8 @@ export const connectMetaAccount = onCall(
     const expiresAt = admin.firestore.Timestamp.fromMillis(Date.now() + expiresInSeconds * 1000);
 
     const [adAccountsRes, pagesRes] = await Promise.all([
-      fetch(`${META_BASE_URL}/me/adaccounts?fields=id,name,currency,account_status&access_token=${longLivedToken}`),
-      fetch(`${META_BASE_URL}/me/accounts?fields=id,name&access_token=${longLivedToken}`),
+      fetchWithTimeout(`${META_BASE_URL}/me/adaccounts?fields=id,name,currency,account_status&access_token=${longLivedToken}`),
+      fetchWithTimeout(`${META_BASE_URL}/me/accounts?fields=id,name&access_token=${longLivedToken}`),
     ]);
     const adAccountsData = (await adAccountsRes.json()) as MetaListResponse<MetaAdAccountItem>;
     const pagesData = (await pagesRes.json()) as MetaListResponse<MetaPageItem>;

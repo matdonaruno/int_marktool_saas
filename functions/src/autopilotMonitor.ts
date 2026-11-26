@@ -4,6 +4,7 @@ import * as admin from "firebase-admin";
 import { decryptToken } from "./utils/cryptoHelper";
 import { META_BASE_URL, updateMetaObjectStatus } from "./utils/metaApiClient";
 import { checkLandingPageHealth } from "./utils/healthCheck";
+import { fetchWithTimeout } from "./utils/fetchWithTimeout";
 
 if (!admin.apps.length) {
   admin.initializeApp();
@@ -53,7 +54,7 @@ async function evaluateCampaignAds(
   }
 
   const insightsUrl = `${META_BASE_URL}/${campaign.metaCampaignId}/insights?fields=ad_id,spend,impressions,clicks,actions,action_values&level=ad&date_preset=last_3d&access_token=${accessToken}`;
-  const insightsRes = await fetch(insightsUrl);
+  const insightsRes = await fetchWithTimeout(insightsUrl);
   if (!insightsRes.ok) return;
 
   const adInsightsList = ((await insightsRes.json()) as { data?: MetaAdInsight[] }).data || [];

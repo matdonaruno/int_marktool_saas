@@ -4,7 +4,9 @@
     "build": "tsc",
     "serve": "npm run build && firebase emulators:start --only functions",
     "shell": "npm run build && firebase functions:shell",
-    "deploy": "firebase deploy --only functions"
+    "deploy": "firebase deploy --only functions",
+    "test": "tsc && node --test lib/decisionApi/app.test.js lib/decisionApi/feedbackLoop.test.js lib/decisionApi/fileStore.test.js",
+    "start:decision-api": "node lib/decisionApi/server.js"
   },
   "engines": {
     "node": "20"

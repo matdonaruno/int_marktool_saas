@@ -1,0 +1,61 @@
+# ハーネス L4: PR / main への push で必ず回る最終ゲート（docs/HARNESS.md）
+# ブランチ保護で「harness」「web」「functions」の3ジョブを必須チェックに指定すること（docs/GITHUB_RULES.md G9）
+name: ci
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+# G11: ワークフローの権限は最小（読み取りのみ）。pull_request_target は使わない
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  harness:
+    name: harness (rules + tests)
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+      - run: node scripts/harness/check-rules.mjs
+      - run: node --test scripts/harness/rules.test.mjs scripts/harness/gitPolicy.test.mjs
+
+  web:
+    name: web (lint + typecheck)
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+      - run: npm ci --no-audit --no-fund
+      - run: npm run lint
+      - run: npm run typecheck
+
+  functions:
+    name: functions (build)
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    defaults:
+      run:
+        working-directory: functions
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+          cache-dependency-path: functions/package-lock.json
+      - run: npm ci --no-audit --no-fund
+      - run: npm run build
+      - run: npm test

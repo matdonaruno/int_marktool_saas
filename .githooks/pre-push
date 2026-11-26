@@ -1,0 +1,28 @@
+#!/bin/sh
+# ハーネス: push 前の最終関門（docs/HARNESS.md L3 / docs/GITHUB_RULES.md G1 G2 G4）
+#  - 保護ブランチへの push を拒否
+#  - 非 fast-forward（= force push / 履歴書き換え）を拒否
+#  - ブランチ削除を拒否
+#  - git 管理下の全ファイルにルールチェック
+zero=0000000000000000000000000000000000000000
+status=0
+while read -r local_ref local_sha remote_ref remote_sha; do
+  name=${remote_ref#refs/heads/}
+  case "$name" in
+    main|master|production|release)
+      echo "⛔ G1: 保護ブランチ $name へ直接 push しない。作業ブランチ → PR" >&2
+      status=1; continue ;;
+  esac
+  if [ "$local_sha" = "$zero" ]; then
+    echo "⛔ G4: リモートブランチ $name の削除は push で行わない。archive/$name タグを打ってから GitHub 上で人間が削除" >&2
+    status=1; continue
+  fi
+  if [ "$remote_sha" != "$zero" ] && git cat-file -e "$remote_sha" 2>/dev/null; then
+    if ! git merge-base --is-ancestor "$remote_sha" "$local_sha"; then
+      echo "⛔ G2: $name への非 fast-forward push（force push）を拒否。リモートを merge してから push" >&2
+      status=1; continue
+    fi
+  fi
+done
+[ $status -ne 0 ] && exit $status
+exec node scripts/harness/check-rules.mjs

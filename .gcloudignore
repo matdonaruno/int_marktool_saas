@@ -1,0 +1,23 @@
+# gcloud builds submit でアップロードしないもの（安全ルール S4/S5）。
+# .gitignore も読み込む。
+#!include:.gitignore
+.git
+.github
+.claude
+.githooks
+.env
+.env.*
+**/node_modules
+**/lib
+**/*.pem
+**/*.p8
+**/*.p12
+**/*serviceAccount*.json
+**/*-firebase-adminsdk-*.json
+**/AuthKey_*
+**/*credentials*
+memo*.txt
+app/
+types/
+docs/
+scripts/

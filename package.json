@@ -6,7 +6,14 @@
     "dev": "next dev",
     "build": "next build",
     "start": "next start",
-    "lint": "eslint ."
+    "lint": "eslint .",
+    "typecheck": "tsc --noEmit",
+    "harness:install": "git config core.hooksPath .githooks",
+    "harness:check": "node scripts/harness/check-rules.mjs",
+    "harness:test": "node --test scripts/harness/rules.test.mjs scripts/harness/gitPolicy.test.mjs",
+    "harness:verify": "npm run harness:check && npm run harness:test && npm run lint && npm run typecheck && npm --prefix functions run build && npm --prefix functions test",
+    "decision-api:local": "npm --prefix functions run build && DECISION_API_STORE=file PORT=${PORT:-8787} node functions/lib/decisionApi/server.js",
+    "decision-api:key": "npm --prefix functions run build && node functions/lib/decisionApi/admin/issueApiKey.js --local"
   },
   "dependencies": {
     "firebase": "^11.4.0",

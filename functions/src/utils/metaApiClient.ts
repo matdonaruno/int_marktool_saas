@@ -1,4 +1,5 @@
 import { HttpsError } from "firebase-functions/v2/https";
+import { fetchWithTimeout } from "./fetchWithTimeout";
 
 export const META_GRAPH_API_VERSION = "v21.0";
 export const META_BASE_URL = `https://graph.facebook.com/${META_GRAPH_API_VERSION}`;
@@ -19,7 +20,7 @@ export async function postToMetaApi<T = Record<string, unknown>>(
   payload: Record<string, unknown>,
   accessToken: string
 ): Promise<T> {
-  const res = await fetch(`${META_BASE_URL}/${endpoint}`, {
+  const res = await fetchWithTimeout(`${META_BASE_URL}/${endpoint}`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ ...payload, access_token: accessToken }),
