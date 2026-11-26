@@ -3,6 +3,9 @@ import { defineSecret } from "firebase-functions/params";
 import * as admin from "firebase-admin";
 import { GoogleGenAI } from "@google/genai";
 import { getActiveModelRoute } from "./utils/aiRouter";
+import { fetchWithTimeout } from "./utils/fetchWithTimeout";
+
+const VIDEO_DOWNLOAD_TIMEOUT_MS = 120000;
 
 if (!admin.apps.length) {
   admin.initializeApp();
@@ -52,7 +55,7 @@ export const generateCreativeVideo = onCall(
       throw new HttpsError("internal", "動画生成に失敗しました。");
     }
 
-    const videoResponse = await fetch(`${videoUri}&key=${geminiApiKey.value()}`);
+    const videoResponse = await fetchWithTimeout(`${videoUri}&key=${geminiApiKey.value()}`, {}, VIDEO_DOWNLOAD_TIMEOUT_MS);
     const videoBuffer = Buffer.from(await videoResponse.arrayBuffer());
     const bucket = storage.bucket();
     const filePath = `users/${userId}/creatives/${creativeId}_${Date.now()}.mp4`;

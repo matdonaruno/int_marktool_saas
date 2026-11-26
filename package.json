@@ -6,7 +6,12 @@
     "dev": "next dev",
     "build": "next build",
     "start": "next start",
-    "lint": "eslint ."
+    "lint": "eslint .",
+    "typecheck": "tsc --noEmit",
+    "harness:install": "git config core.hooksPath .githooks",
+    "harness:check": "node scripts/harness/check-rules.mjs",
+    "harness:test": "node --test scripts/harness/rules.test.mjs scripts/harness/gitPolicy.test.mjs",
+    "harness:verify": "npm run harness:check && npm run harness:test && npm run lint && npm run typecheck && npm --prefix functions run build"
   },
   "dependencies": {
     "firebase": "^11.4.0",

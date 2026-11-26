@@ -3,6 +3,7 @@ import { defineSecret } from "firebase-functions/params";
 import * as admin from "firebase-admin";
 import { decryptToken } from "./utils/cryptoHelper";
 import { META_BASE_URL, postToMetaApi } from "./utils/metaApiClient";
+import { fetchWithTimeout } from "./utils/fetchWithTimeout";
 
 if (!admin.apps.length) {
   admin.initializeApp();
@@ -62,7 +63,7 @@ export const runDailyOrganicSocialPost = onSchedule(
       const pageId = metaConn.selectedFacebookPageId as string;
 
       try {
-        const pageRes = await fetch(
+        const pageRes = await fetchWithTimeout(
           `${META_BASE_URL}/${pageId}?fields=access_token,instagram_business_account&access_token=${userToken}`
         );
         const pageData = (await pageRes.json()) as PageInfoResponse;

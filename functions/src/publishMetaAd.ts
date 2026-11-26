@@ -3,6 +3,7 @@ import { defineSecret } from "firebase-functions/params";
 import * as admin from "firebase-admin";
 import { decryptToken } from "./utils/cryptoHelper";
 import { postToMetaApi } from "./utils/metaApiClient";
+import { assertCanActivate } from "./utils/guardrailGate";
 
 if (!admin.apps.length) {
   admin.initializeApp();
@@ -71,7 +72,15 @@ export const publishCreativeToMeta = onCall(
       throw new HttpsError("failed-precondition", "画像が未生成です。");
     }
 
-    const initialStatus: "ACTIVE" | "PAUSED" = guardrails.isAutopilotEnabled ? "ACTIVE" : "PAUSED";
+    const shouldActivate = guardrails.isAutopilotEnabled === true;
+    if (shouldActivate) {
+      await assertCanActivate({
+        dailyBudget,
+        dailySpendCap: guardrails.dailySpendCap,
+        landingPageUrl,
+      });
+    }
+    const initialStatus: "ACTIVE" | "PAUSED" = shouldActivate ? "ACTIVE" : "PAUSED";
 
     const imageRes = await postToMetaApi<MetaAdImageResponse>(
       `${adAccountId}/adimages`,

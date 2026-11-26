@@ -3,6 +3,7 @@ import { defineSecret } from "firebase-functions/params";
 import * as admin from "firebase-admin";
 import { Type, Schema } from "@google/genai";
 import { executeStructuredTextTask } from "./utils/aiRouter";
+import { fetchWithTimeout } from "./utils/fetchWithTimeout";
 
 if (!admin.apps.length) {
   admin.initializeApp();
@@ -51,13 +52,12 @@ function sanitizeHtmlToText(rawHtml: string): string {
 }
 
 async function fetchProductPageText(productUrl: string): Promise<string> {
-  const controller = new AbortController();
-  const timeout = setTimeout(() => controller.abort(), FETCH_TIMEOUT_MS);
   try {
-    const res = await fetch(productUrl, {
-      signal: controller.signal,
-      headers: { "User-Agent": "Mozilla/5.0 (compatible; BrandDnaExtractor/1.0)" },
-    });
+    const res = await fetchWithTimeout(
+      productUrl,
+      { headers: { "User-Agent": "Mozilla/5.0 (compatible; BrandDnaExtractor/1.0)" } },
+      FETCH_TIMEOUT_MS
+    );
     if (!res.ok) {
       throw new HttpsError("internal", `URL取得失敗: ${res.status}`);
     }
@@ -66,8 +66,6 @@ async function fetchProductPageText(productUrl: string): Promise<string> {
     if (err instanceof HttpsError) throw err;
     const message = err instanceof Error ? err.message : "不明なエラー";
     throw new HttpsError("internal", `URLの取得に失敗しました: ${message}`);
-  } finally {
-    clearTimeout(timeout);
   }
 }
 

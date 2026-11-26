@@ -37,3 +37,15 @@ next-env.d.ts
 
 # Memo files (source specs)
 memo*.txt
+
+# Claude Code ローカル設定（個人の permission。共有設定は .claude/settings.json）
+.claude/settings.local.json
+
+# 機密ファイル（docs/GITHUB_RULES.md G5 / 安全ルール5）
+*.pem
+*.p8
+*.p12
+*.pfx
+*serviceAccount*.json
+*-firebase-adminsdk-*.json
+AuthKey_*

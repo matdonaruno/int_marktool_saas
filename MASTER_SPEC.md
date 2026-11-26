@@ -49,6 +49,9 @@
 5. **Advantage+ クリエイティブの無断有効化禁止**：入稿時 `degrees_of_freedom_spec` でテキスト自動改変を必ず `OPT_OUT` にする。
 6. **モデルIDのハードコード禁止**：機能ファイル内に `"gemini-2.5-pro"` 等を直接書かず、必ず `utils/aiRouter.ts` を経由して呼び出す。
 
+### 1.5 ルールの機械的強制（ハーネス）
+上記 1.3・1.4 は `scripts/harness/` で機械チェックされ、Claude Code フック・git フック・CI のすべてで同じ判定が走る。外部HTTPは `utils/fetchWithTimeout.ts`、ACTIVE 化は `utils/guardrailGate.ts` の `assertCanActivate()` を必ず経由する。設計は `docs/HARNESS.md`、GitHub 連携とインシデント防止のルールは `docs/GITHUB_RULES.md` を参照。
+
 ---
 
 ## 第2章：ガードレール目標・KPI基準

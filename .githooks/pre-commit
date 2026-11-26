@@ -1,0 +1,10 @@
+#!/bin/sh
+# ハーネス: ステージ済みの内容にルールチェックをかける（docs/HARNESS.md L3）
+# 有効化: npm run harness:install （= git config core.hooksPath .githooks）
+branch=$(git rev-parse --abbrev-ref HEAD 2>/dev/null)
+case "$branch" in
+  main|master|production|release)
+    echo "⛔ G1: 保護ブランチ $branch に直接コミットしない。git switch -c <type>/<topic> してから" >&2
+    exit 1 ;;
+esac
+exec node scripts/harness/check-rules.mjs --staged

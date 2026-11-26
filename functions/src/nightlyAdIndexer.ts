@@ -2,6 +2,7 @@ import { onSchedule } from "firebase-functions/v2/scheduler";
 import { defineSecret } from "firebase-functions/params";
 import * as admin from "firebase-admin";
 import { META_BASE_URL } from "./utils/metaApiClient";
+import { fetchWithTimeout } from "./utils/fetchWithTimeout";
 
 if (!admin.apps.length) {
   admin.initializeApp();
@@ -34,7 +35,7 @@ async function fetchAdsForKeyword(keyword: string, token: string): Promise<MetaA
   searchUrl.searchParams.append("limit", "50");
   searchUrl.searchParams.append("access_token", token);
 
-  const res = await fetch(searchUrl.toString());
+  const res = await fetchWithTimeout(searchUrl.toString());
   if (!res.ok) {
     console.error(`Ad Library API Error [${keyword}]:`, await res.text());
     return [];
