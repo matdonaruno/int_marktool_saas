@@ -18,6 +18,9 @@
 - トークンを console に出さない。クライアントから `encryptedAccessToken` に触れない。`any` を使わない
 - adcreatives は `degrees_of_freedom_spec` で `OPT_OUT`。Security Rules に `if true` を書かない
 
+## 判断 API（Cloud Run）
+- 外部アプリ向けの判断 API は `functions/src/decisionApi/`（仕様・ループ設計・デプロイは `docs/DECISION_API.md`）。プロンプトを変えたら `*_PROMPT_VERSION` を上げる。
+
 ## 完了条件
 - `npm run harness:verify` が通るまで「完了」と言わない。裏で起動したプロセス（emulator / next dev）は終了時に `ps` で残っていないか確認する。
 - ブロックされたら、メッセージのルール ID と根拠を読んで直す。ルール自体がおかしいと思ったらユーザーに相談する（自分で緩めない）。

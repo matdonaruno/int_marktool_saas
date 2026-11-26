@@ -1,0 +1,16 @@
+# docker build のコンテキストに機密・不要物を入れない（安全ルール S4/S5）
+**/node_modules
+**/lib
+.git
+.next
+.env
+.env.*
+**/*.pem
+**/*.p8
+**/*.p12
+**/*serviceAccount*.json
+**/*-firebase-adminsdk-*.json
+**/AuthKey_*
+**/*credentials*
+memo*.txt
+.claude

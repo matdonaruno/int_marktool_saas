@@ -65,6 +65,8 @@
 ---
 
 ## 第3章：環境構築・デプロイコマンド
+> 判断 API（Cloud Run。muse・ローカルアプリ等の外部アプリ向け）のデプロイ・API キー発行は `docs/DECISION_API.md` §5 を参照。
+
 ```bash
 # 1. Secret Manager へのシークレット登録
 firebase functions:secrets:set GEMINI_API_KEY

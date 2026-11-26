@@ -58,7 +58,7 @@
 | G6 | `reset --hard` / `clean -f` は人間の指示時のみ | ✅ | ✅ | | | |
 | G7 | フック迂回（`--no-verify`・hooksPath 変更）禁止 | ✅ | ✅ | | ✅ | CI が後段で必ず回る |
 | G8 | PR マージ・リポジトリ設定は人間 | ✅ | ✅ | | | |
-| G10 | デプロイ・Secret Manager 操作は人間 | ✅ | ✅ | | | |
+| G10 | デプロイ（Firebase / Cloud Run / Cloud Build）・Secret Manager・API キー発行は人間 | ✅ | ✅ | | | `deploy.sh` も AI 実行不可 |
 | S1 | 未検証変数・`/`・`$HOME` への `rm -r`、sudo 等 | ✅ | ✅ | | | |
 | S4 | クラウドストレージ一括転送・削除はユーザー | ✅ | ✅ | | | |
 | S4 | Security Rules を `if true` にしない | | ✅ | ✅ | ✅ | |

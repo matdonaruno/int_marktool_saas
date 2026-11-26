@@ -11,7 +11,8 @@ export type AiTaskRole =
   | "criticAgent"
   | "brandExtractor"
   | "imageGenerator"
-  | "videoGenerator";
+  | "videoGenerator"
+  | "decisionAgent";
 
 export interface ModelRouteConfig {
   provider: "google" | "openai_compatible";
@@ -26,7 +27,12 @@ const DEFAULT_ROUTING: Record<AiTaskRole, ModelRouteConfig> = {
   brandExtractor: { provider: "google", modelId: "gemini-2.5-pro", temperature: 0.3 },
   imageGenerator: { provider: "google", modelId: "imagen-3.0-generate-002" },
   videoGenerator: { provider: "google", modelId: "veo-2.0-generate-001" },
+  decisionAgent: { provider: "google", modelId: "gemini-2.5-pro", temperature: 0.2 },
 };
+
+/** MASTER_SPEC 1.4-3: AI 呼び出しのタイムアウトとリトライ上限 */
+export const AI_REQUEST_TIMEOUT_MS = 60000;
+export const AI_MAX_ATTEMPTS = 3;
 
 let cachedRouting: Record<AiTaskRole, ModelRouteConfig> | null = null;
 let lastCacheTime = 0;
@@ -55,6 +61,7 @@ export async function executeStructuredTextTask<T>(params: {
   responseSchema: Schema;
   apiKey: string;
   overrideModelId?: string;
+  timeoutMs?: number;
 }): Promise<{ data: T; usedModelId: string; latencyMs: number; estimatedTokens: number }> {
   const route = await getActiveModelRoute(params.role);
   const targetModelId = params.overrideModelId || route.modelId;
@@ -68,6 +75,10 @@ export async function executeStructuredTextTask<T>(params: {
       responseMimeType: "application/json",
       responseSchema: params.responseSchema,
       temperature: route.temperature ?? 0.5,
+      httpOptions: {
+        timeout: params.timeoutMs ?? AI_REQUEST_TIMEOUT_MS,
+        retryOptions: { attempts: AI_MAX_ATTEMPTS },
+      },
     },
   });
 

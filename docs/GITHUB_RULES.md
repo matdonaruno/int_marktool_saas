@@ -20,7 +20,7 @@ Claude Code（ローカル / クラウド）と人間がこのリポジトリを
 | **G7** | フックを迂回しない（`--no-verify`、`commit -n`、`core.hooksPath` の変更・解除）。フックが落ちたら原因を直す。 | ハーネスの無効化。 |
 | **G8** | **PR のマージ・auto-merge・リポジトリ設定変更・Secrets 操作は人間が行う。** AI はドラフト PR の作成まで。GitHub MCP の `push_files` / `create_or_update_file` / `delete_file` は使わない（ローカルフックを素通りして直接コミットされるため）。 | 外向きの最終判断は人間。 |
 | **G9** | CI（harness / web / functions）が緑でない PR はマージしない。テストを skip・削除して緑にしない。ワークフローの有効/無効は人間。 | |
-| **G10** | `firebase deploy`、`functions:secrets:set/destroy`、`firestore:delete`、gcloud の本番変更は **人間が** MASTER_SPEC 第3章の手順で行う。PR に本番影響とロールバック手順を書く。 | 広告配信・課金に直結する。誤配信は実費が出る。 |
+| **G10** | `firebase deploy`、`functions:secrets:set/destroy`、`firestore:delete`、gcloud の本番変更（Cloud Run デプロイ・Cloud Build・Secret Manager を含む）、`deploy/*/deploy.sh`、判断 API のキー発行は **人間が** MASTER_SPEC 第3章 / `docs/DECISION_API.md` §5 の手順で行う。PR に本番影響とロールバック手順を書く。 | 広告配信・課金に直結する。誤配信は実費が出る。 |
 | **G11** | GitHub Actions は `permissions: contents: read` を基本にし、`pull_request_target` を使わない。Secrets を使うジョブを追加するときは人間がレビューする。 | public リポジトリへのフォーク PR から Secrets を抜かれる典型経路。 |
 
 ## 2. インシデント防止ルール（S）— 横断安全ルールのこのプロジェクトへの適用

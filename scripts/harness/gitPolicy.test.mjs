@@ -90,3 +90,23 @@ test("誤検知しない: hooksPath の読み取り", () => {
   assert.ok(!blocked("git config --get core.hooksPath"));
   assert.ok(blocked("git config core.hooksPath /dev/null"));
 });
+
+test("G10/G5: Cloud Run 判断 API のデプロイ・キー発行は人間", () => {
+  assert.ok(blocked("gcloud run deploy decision-api --image x"));
+  assert.ok(blocked("gcloud builds submit --config deploy/decision-api/cloudbuild.yaml ."));
+  assert.ok(blocked("gcloud secrets versions add GEMINI_API_KEY --data-file=-"));
+  assert.ok(blocked("PROJECT_ID=p bash deploy/decision-api/deploy.sh"));
+  assert.ok(blocked("node lib/decisionApi/admin/issueApiKey.js --client muse"));
+  assert.ok(blocked("docker push asia-northeast1-docker.pkg.dev/p/r/i:1"));
+  assert.ok(!blocked("gcloud run services describe decision-api --region asia-northeast1"));
+  assert.ok(!blocked("docker build -f deploy/decision-api/Dockerfile ."));
+  assert.ok(blocked("./deploy/decision-api/deploy.sh"));
+  assert.ok(blocked("bash -x deploy/decision-api/deploy.sh"));
+  assert.ok(!blocked("bash -n deploy/decision-api/deploy.sh"));
+});
+
+test("誤検知しない: スクリプトのパスに触れるだけの操作", () => {
+  assert.ok(!blocked("chmod +x deploy/decision-api/deploy.sh"));
+  assert.ok(!blocked("git add deploy/decision-api/deploy.sh functions/src/decisionApi/admin/issueApiKey.ts"));
+  assert.ok(!blocked("bash -n deploy/decision-api/Dockerfile"));
+});

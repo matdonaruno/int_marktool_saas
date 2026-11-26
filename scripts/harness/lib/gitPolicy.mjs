@@ -112,8 +112,23 @@ export function checkSegment(seg, ctx = {}) {
       return `G10: firebase ${sub} は本番に作用する。デプロイ・シークレット操作は人間が MASTER_SPEC 第3章の手順で行う`;
     }
   }
-  if (tok[0] === "gcloud" && tok.some((t) => /^(delete|deploy|set-iam-policy|add-iam-policy-binding)$/.test(t))) {
-    return "G10: gcloud による本番リソース変更は人間が行う";
+  if (tok[0] === "gcloud" && tok.includes("secrets") && tok.some((t) => /^(access|add|destroy|disable|enable)$/.test(t))) {
+    return "G5: Secret Manager の値の閲覧・追加・破棄は人間が行う（値を AI の会話に出さない）";
+  }
+  if (tok[0] === "gcloud" && tok.some((t) => /^(delete|deploy|submit|create|update|set-iam-policy|add-iam-policy-binding|remove-iam-policy-binding)$/.test(t))) {
+    return "G10: gcloud による本番リソースの作成・変更・デプロイ（Cloud Run / Cloud Build / Secret Manager 等）は人間が行う";
+  }
+  if (tok[0] === "docker" && /^(push|login)$/.test(tok[1] || "")) return "G10: コンテナイメージの push は人間が行う";
+  // 実行するときだけ止める（chmod / git add / cat などでパスに触れるのは可）
+  const runTok = stripAssignments(tok);
+  const isInterpreter = /^(bash|sh|zsh|source|\.|node|npx|tsx|ts-node)$/.test(runTok[0] || "");
+  const isSyntaxCheckOnly = /^(bash|sh|zsh)$/.test(runTok[0] || "") && runTok.includes("-n");
+  const runTarget = isSyntaxCheckOnly ? "" : isInterpreter ? runTok.slice(1).find((t) => !t.startsWith("-")) : runTok[0];
+  if (/(^|\/)deploy\/[^/]+\/deploy\.sh$/.test(runTarget || "")) {
+    return "G10: デプロイスクリプトは人間が実行する（docs/DECISION_API.md §5）";
+  }
+  if (/issueApiKey\.(js|ts)$/.test(runTarget || "")) {
+    return "G5: API キー発行は人間が実行する（平文キーが AI の会話ログに残ると漏えい扱いになる）";
   }
 
   const readsEnv = tok.some((t) => /(^|\/)\.env(\.[\w.-]+)?$/.test(t) && !/\.example$/.test(t));

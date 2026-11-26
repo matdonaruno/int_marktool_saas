@@ -3,6 +3,7 @@ import { defineSecret } from "firebase-functions/params";
 import * as admin from "firebase-admin";
 import { Type, Schema } from "@google/genai";
 import { executeStructuredTextTask } from "./utils/aiRouter";
+import { evaluateCreative, CriticOutput, PASSING_CRITIC_SCORE } from "./utils/criticAgent";
 
 if (!admin.apps.length) {
   admin.initializeApp();
@@ -10,7 +11,6 @@ if (!admin.apps.length) {
 const db = admin.firestore();
 const geminiApiKey = defineSecret("GEMINI_API_KEY");
 const MAX_ATTEMPTS = 3;
-const PASSING_CRITIC_SCORE = 80;
 
 interface CreativeOutput {
   hook: string;
@@ -18,13 +18,6 @@ interface CreativeOutput {
   headline: string;
   imagePrompt: string;
   angle: string;
-}
-
-interface CriticOutput {
-  score: number;
-  isPassed: boolean;
-  weaknesses: string[];
-  improvementInstruction: string;
 }
 
 interface GenerateCreativeInput {
@@ -45,17 +38,6 @@ const creativeSchema: Schema = {
     angle: { type: Type.STRING, description: "採用した訴求軸" },
   },
   required: ["hook", "primaryText", "headline", "imagePrompt", "angle"],
-};
-
-const criticSchema: Schema = {
-  type: Type.OBJECT,
-  properties: {
-    score: { type: Type.INTEGER, description: "100点満点中の総合スコア（80点以上で合格）" },
-    isPassed: { type: Type.BOOLEAN, description: "80点以上かつ広告ポリシー違反がない場合はtrue" },
-    weaknesses: { type: Type.ARRAY, items: { type: Type.STRING } },
-    improvementInstruction: { type: Type.STRING },
-  },
-  required: ["score", "isPassed", "weaknesses", "improvementInstruction"],
 };
 
 async function runGeneratorAndCriticLoop(
@@ -86,13 +68,7 @@ async function runGeneratorAndCriticLoop(
     });
     currentCreative = genRes.data;
 
-    const criticRes = await executeStructuredTextTask<CriticOutput>({
-      role: "criticAgent",
-      prompt: `以下のMeta広告案を100点満点で厳格採点してください（フック30点・独自性30点・Meta広告ポリシー遵守40点）。80点以上かつポリシー違反ゼロの場合のみ isPassed: true にしてください。\n${JSON.stringify(currentCreative, null, 2)}`,
-      responseSchema: criticSchema,
-      apiKey,
-    });
-    criticResult = criticRes.data;
+    criticResult = await evaluateCreative(currentCreative, apiKey);
 
     if (criticResult.isPassed && criticResult.score >= PASSING_CRITIC_SCORE) {
       break;
