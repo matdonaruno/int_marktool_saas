@@ -2,7 +2,7 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import { createServer, Server } from "node:http";
 import { AddressInfo } from "node:net";
-import { createDecisionApiHandler } from "./app";
+import { createDecisionApiHandler, redact } from "./app";
 import { hashApiKey } from "./auth";
 import { MemoryDecisionStore } from "./memoryStore";
 import { CriticReferenceExample } from "../utils/criticAgent";
@@ -138,4 +138,31 @@ test("decide: 選択肢つき判断と insights（判断と成果の相関）", 
   const groups = ins.json.groups as { withOutcome: number; promptVersion: string }[];
   assert.equal(groups[0].withOutcome, 1);
   assert.equal(groups[0].promptVersion, "decide-test");
+});
+
+test("AI 側の認証エラーは 502 と直し方を返し、ログ用の文字列は鍵を伏せる", async (t) => {
+  const store = new MemoryDecisionStore();
+  store.addClient(hashApiKey(KEY_A), { clientId: "muse", name: "Muse", isActive: true, dailyLimit: 10 });
+  const failing: DecisionEngine = {
+    critic: async () => { throw new Error('{"error":{"code":400,"message":"API key not valid","status":"INVALID_ARGUMENT"}}'); },
+    decide: async () => { throw new Error("RESOURCE_EXHAUSTED"); },
+  };
+  const handler = createDecisionApiHandler({ store, engine: failing });
+  const server: Server = createServer((req, res) => void handler(req, res));
+  await new Promise<void>((r) => server.listen(0, "127.0.0.1", () => r()));
+  t.after(() => new Promise<void>((r) => server.close(() => r())));
+  const base = `http://127.0.0.1:${(server.address() as AddressInfo).port}`;
+  const post = (path: string, body: unknown) =>
+    fetchWithTimeout(base + path, { method: "POST", headers: { Authorization: `Bearer ${KEY_A}` }, body: JSON.stringify(body) }, 5000);
+  const r1 = await post("/v1/critic", { creative: { primaryText: "x" } });
+  assert.equal(r1.status, 502);
+  assert.match(((await r1.json()) as { error: string }).error, /GEMINI_API_KEY/);
+  assert.equal((await post("/v1/decide", { question: "q" })).status, 503);
+
+  const fakeGoogleKey = "AIza" + "C".repeat(35);
+  const leaked = `GET https://x/v1?key=${fakeGoogleKey}&alt=json token ${fakeGoogleKey} dak_abcdefghijklmnop`;
+  const out = redact(leaked);
+  assert.ok(!out.includes(fakeGoogleKey));
+  assert.ok(!out.includes("dak_abcdefghijklmnop"));
+  assert.match(out, /key=\*\*\*/);
 });

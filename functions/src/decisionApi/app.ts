@@ -163,6 +163,26 @@ async function dispatch(ctx: Ctx): Promise<{ status: number; body: unknown; clie
   return { status: route.method === "POST" && /outcomes$/.test(ctx.url.pathname) ? 202 : 200, body, clientId: client.clientId };
 }
 
+/** ログに出す前に鍵らしき値を伏せる（MASTER_SPEC 1.4-1） */
+export function redact(text: string): string {
+  return text
+    .replace(/([?&](key|access_token)=)[^&\s"']+/gi, "$1***")
+    .replace(/AIza[0-9A-Za-z_-]{35}/g, "***")
+    .replace(/dak_[A-Za-z0-9_-]{10,}/g, "dak_***")
+    .slice(0, 2000);
+}
+
+/** 想定外のエラーを利用者向けに変換する（内部の詳細は返さず、直し方が分かる文言だけ返す） */
+function toHttpError(err: unknown): HttpError {
+  const message = err instanceof Error ? err.message : String(err);
+  if (/API_KEY_INVALID|API key not valid|PERMISSION_DENIED/.test(message)) {
+    return new HttpError(502, "AI（Gemini）側の認証に失敗しました。サーバーの GEMINI_API_KEY を確認してください");
+  }
+  if (/RESOURCE_EXHAUSTED|\b429\b/.test(message)) return new HttpError(503, "AI（Gemini）の利用上限に達しています。時間をおいて再試行してください");
+  if (/abort|timeout/i.test(message)) return new HttpError(504, "AI（Gemini）の応答がタイムアウトしました");
+  return new HttpError(500, "内部エラー");
+}
+
 /** node:http 用のリクエストハンドラを作る */
 export function createDecisionApiHandler(deps: AppDeps) {
   const resolved = { now: () => new Date(), newId: () => randomUUID(), ...deps };
@@ -179,9 +199,9 @@ export function createDecisionApiHandler(deps: AppDeps) {
       ({ status, clientId } = out);
       send(res, status, out.body);
     } catch (err) {
-      const e = err instanceof HttpError ? err : new HttpError(500, "内部エラー");
+      const e = err instanceof HttpError ? err : toHttpError(err);
       status = e.status;
-      if (!(err instanceof HttpError)) console.error("decision-api unhandled error:", err instanceof Error ? err.message : String(err));
+      if (!(err instanceof HttpError)) console.error("decision-api unhandled error:", redact(err instanceof Error ? err.message : String(err)));
       send(res, e.status, { error: e.message, details: e.details });
     }
     console.log(JSON.stringify({ severity: status >= 500 ? "ERROR" : "INFO", method: req.method, path: url.pathname, status, clientId, latencyMs: Date.now() - started }));

@@ -1,10 +1,11 @@
 import * as admin from "firebase-admin";
 import { GoogleGenAI, Schema } from "@google/genai";
 
-if (!admin.apps.length) {
-  admin.initializeApp();
+/** Firestore は使う時に初めて初期化する（ローカルモードでは触らない） */
+function getDb(): admin.firestore.Firestore {
+  if (!admin.apps.length) admin.initializeApp();
+  return admin.firestore();
 }
-const db = admin.firestore();
 
 export type AiTaskRole =
   | "copyGenerator"
@@ -37,14 +38,23 @@ export const AI_MAX_ATTEMPTS = 3;
 let cachedRouting: Record<AiTaskRole, ModelRouteConfig> | null = null;
 let lastCacheTime = 0;
 const CACHE_TTL_MS = 5 * 60 * 1000;
+let isStaticRouting = false;
+
+/**
+ * ローカルモード用: Firestore の systemConfig/aiModels を読まず、DEFAULT_ROUTING だけを使う。
+ */
+export function useStaticRouting(): void {
+  isStaticRouting = true;
+}
 
 /**
  * Resolves the active AI model route for a given task role from Firestore (with 5-min cache).
  */
 export async function getActiveModelRoute(role: AiTaskRole): Promise<ModelRouteConfig> {
+  if (isStaticRouting) return DEFAULT_ROUTING[role];
   const now = Date.now();
   if (!cachedRouting || now - lastCacheTime > CACHE_TTL_MS) {
-    const docSnap = await db.collection("systemConfig").doc("aiModels").get();
+    const docSnap = await getDb().collection("systemConfig").doc("aiModels").get();
     const activeRouting = docSnap.exists ? docSnap.data()?.activeRouting : undefined;
     cachedRouting = activeRouting ? { ...DEFAULT_ROUTING, ...activeRouting } : DEFAULT_ROUTING;
     lastCacheTime = now;

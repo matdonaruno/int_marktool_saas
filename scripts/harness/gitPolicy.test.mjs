@@ -102,6 +102,8 @@ test("G10/G5: Cloud Run 判断 API のデプロイ・キー発行は人間", () 
   assert.ok(!blocked("docker build -f deploy/decision-api/Dockerfile ."));
   assert.ok(blocked("./deploy/decision-api/deploy.sh"));
   assert.ok(blocked("bash -x deploy/decision-api/deploy.sh"));
+  assert.ok(blocked("npm run decision-api:key -- --client muse"));
+  assert.ok(!blocked("npm run decision-api:local"));
   assert.ok(!blocked("bash -n deploy/decision-api/deploy.sh"));
 });
 

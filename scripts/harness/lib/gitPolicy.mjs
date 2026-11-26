@@ -127,7 +127,8 @@ export function checkSegment(seg, ctx = {}) {
   if (/(^|\/)deploy\/[^/]+\/deploy\.sh$/.test(runTarget || "")) {
     return "G10: デプロイスクリプトは人間が実行する（docs/DECISION_API.md §5）";
   }
-  if (/issueApiKey\.(js|ts)$/.test(runTarget || "")) {
+  const isNpmKeyScript = /^(npm|pnpm|yarn)$/.test(runTok[0] || "") && runTok.includes("decision-api:key");
+  if (isNpmKeyScript || /issueApiKey\.(js|ts)$/.test(runTarget || "")) {
     return "G5: API キー発行は人間が実行する（平文キーが AI の会話ログに残ると漏えい扱いになる）";
   }
 

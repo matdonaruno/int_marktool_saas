@@ -20,6 +20,47 @@ muse やローカルアプリなど、**どのアプリからでも HTTP で呼�
  Gemini: aiRouter 経由（criticAgent / decisionAgent ロール。モデルは systemConfig/aiModels で切替）
 ```
 
+## 0. まずローカルで使う（GCP 不要）
+
+自分の PC で判断 API を動かす。データは `~/.decision-api/data.json`（リポジトリの外、本人のみ読める権限）に保存され、
+フィードバックループも Cloud Run 版と同じように動く。必要なのは Gemini のキーだけ。
+
+**準備（初回だけ）**
+
+```bash
+git clone https://github.com/matdonaruno/int_marktool_saas && cd int_marktool_saas
+```
+
+```bash
+git switch claude/awesome-cannon-mtpas4
+```
+
+（PR #1 をマージ済みなら、この行は不要）
+
+```bash
+npm ci && npm --prefix functions ci
+```
+
+**muse 用の API キーを発行**（サーバーを止めた状態で。キーは1回だけ表示される → muse の秘匿情報ストアへ）
+
+```bash
+npm run decision-api:key -- --client muse
+```
+
+**起動**（Gemini のキーは環境変数で渡す。Doppler 等を使っているなら `doppler run -- npm run decision-api:local`）
+
+```bash
+GEMINI_API_KEY=<Geminiのキー> npm run decision-api:local
+```
+
+→ `http://127.0.0.1:8787` で待ち受ける。止めるときは Ctrl+C。
+
+**muse 側の設定**: `DECISION_API_URL=http://127.0.0.1:8787` / `DECISION_API_KEY=<上で発行したキー>`
+
+- 127.0.0.1 は「同じ PC からだけ接続できる」設定。muse が別のマシン（クラウド等）で動いているなら届かないので、その場合は §5 の Cloud Run 版にする。
+- サーバー起動中はキー発行できない（起動中に書くとキーが消えるため、コマンドが止める）。
+- 後で Cloud Run に移っても、API の呼び方は同じ（URL とキーを差し替えるだけ）。ローカルの判断履歴を Firestore へ移す機能はまだない。
+
 ## 1. 認証
 
 - アプリごとに API キーを発行する（`dak_` で始まる 256bit 乱数）。保存されるのは SHA-256 ハッシュだけ。
