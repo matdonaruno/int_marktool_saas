@@ -195,6 +195,16 @@ GOOGLE_CLOUD_PROJECT=<PROJECT_ID> node functions/lib/decisionApi/admin/issueApiK
 - 同じ `--client` で再実行するとキーが入れ替わり、古いキーは即無効（ローテーション）。
 - 失効: 同じコマンドに `--revoke`。
 
+### 5.4 呼び出し側アプリへの登録
+
+| アプリ | キーの置き場所 | 呼び出し元 | 備考 |
+|---|---|---|---|
+| muse | muse の秘匿情報ストア（`DECISION_API_KEY`）と `DECISION_API_URL` | muse のサーバー側 | 秘匿情報を保持できるため中継不要。`ALLOWED_ORIGINS`（CORS）も設定しない |
+| ローカルアプリ | OS のキーチェーン / シークレット管理（Doppler 等）。`.env` に置く場合は必ず .gitignore 済みであること | ローカルプロセス | 公開リポジトリにキーを書かない |
+
+- キーはアプリごとに別々に発行する（`--client muse`、`--client <ローカルアプリ名>`）。1つ漏れても他は止めずに済む。
+- 漏えいを疑ったら、そのアプリだけ `--revoke` → 再発行 → アプリ側の秘匿情報を差し替え。
+
 ## 6. コストと安全のガード
 
 | ガード | 値 | 場所 |
@@ -211,5 +221,3 @@ GOOGLE_CLOUD_PROJECT=<PROJECT_ID> node functions/lib/decisionApi/admin/issueApiK
 - 成果の自動送信（`autopilotMonitor` → `outcomes`）は未実装。今は呼び出し側が送る。
 - few-shot は直近 200 件からの選抜。件数が増えたら topic ごとの集計ジョブ（Cloud Scheduler）に移す。
 - SaaS 化時: API キーのテナントを Firebase Auth のユーザー/組織に紐付け、日次上限を Stripe のプランと連動させる。
-- muse の実体（ブラウザアプリかサーバーか）を確認していない。ブラウザから直接呼ぶ必要があるなら、
-  キーを露出させないための中継（muse 側サーバー or Firebase Auth トークン方式の追加）が要る。
