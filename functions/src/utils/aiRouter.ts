@@ -1,0 +1,85 @@
+import * as admin from "firebase-admin";
+import { GoogleGenAI, Schema } from "@google/genai";
+
+if (!admin.apps.length) {
+  admin.initializeApp();
+}
+const db = admin.firestore();
+
+export type AiTaskRole =
+  | "copyGenerator"
+  | "criticAgent"
+  | "brandExtractor"
+  | "imageGenerator"
+  | "videoGenerator";
+
+export interface ModelRouteConfig {
+  provider: "google" | "openai_compatible";
+  modelId: string;
+  temperature?: number;
+  baseUrl?: string;
+}
+
+const DEFAULT_ROUTING: Record<AiTaskRole, ModelRouteConfig> = {
+  copyGenerator: { provider: "google", modelId: "gemini-2.5-pro", temperature: 0.7 },
+  criticAgent: { provider: "google", modelId: "gemini-2.5-flash", temperature: 0.2 },
+  brandExtractor: { provider: "google", modelId: "gemini-2.5-pro", temperature: 0.3 },
+  imageGenerator: { provider: "google", modelId: "imagen-3.0-generate-002" },
+  videoGenerator: { provider: "google", modelId: "veo-2.0-generate-001" },
+};
+
+let cachedRouting: Record<AiTaskRole, ModelRouteConfig> | null = null;
+let lastCacheTime = 0;
+const CACHE_TTL_MS = 5 * 60 * 1000;
+
+/**
+ * Resolves the active AI model route for a given task role from Firestore (with 5-min cache).
+ */
+export async function getActiveModelRoute(role: AiTaskRole): Promise<ModelRouteConfig> {
+  const now = Date.now();
+  if (!cachedRouting || now - lastCacheTime > CACHE_TTL_MS) {
+    const docSnap = await db.collection("systemConfig").doc("aiModels").get();
+    const activeRouting = docSnap.exists ? docSnap.data()?.activeRouting : undefined;
+    cachedRouting = activeRouting ? { ...DEFAULT_ROUTING, ...activeRouting } : DEFAULT_ROUTING;
+    lastCacheTime = now;
+  }
+  return (cachedRouting ?? DEFAULT_ROUTING)[role];
+}
+
+/**
+ * Executes a structured JSON generation task through the unified AI model router.
+ */
+export async function executeStructuredTextTask<T>(params: {
+  role: AiTaskRole;
+  prompt: string;
+  responseSchema: Schema;
+  apiKey: string;
+  overrideModelId?: string;
+}): Promise<{ data: T; usedModelId: string; latencyMs: number; estimatedTokens: number }> {
+  const route = await getActiveModelRoute(params.role);
+  const targetModelId = params.overrideModelId || route.modelId;
+  const startTime = Date.now();
+
+  const ai = new GoogleGenAI({ apiKey: params.apiKey });
+  const response = await ai.models.generateContent({
+    model: targetModelId,
+    contents: params.prompt,
+    config: {
+      responseMimeType: "application/json",
+      responseSchema: params.responseSchema,
+      temperature: route.temperature ?? 0.5,
+    },
+  });
+
+  const latencyMs = Date.now() - startTime;
+  const rawText = response.text || "{}";
+  const usage = response.usageMetadata;
+  const estimatedTokens = (usage?.promptTokenCount || 0) + (usage?.candidatesTokenCount || 0);
+
+  return {
+    data: JSON.parse(rawText) as T,
+    usedModelId: targetModelId,
+    latencyMs,
+    estimatedTokens,
+  };
+}

@@ -1,0 +1,369 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // ===============================================================
+    // Assumed Data Model
+    // ===============================================================
+    //
+    // Collection: users
+    // Document ID: {userId} (matches Firebase Auth UID)
+    // Fields:
+    //   - email: string (server-managed)
+    //   - plan: "free" | "pro" (server-managed via Stripe webhook)
+    //   - stripeCustomerId: string (server-managed)
+    //   - stripeSubscriptionId: string (server-managed)
+    //   - billing: map { pendingBillableSpend: number } (server-managed)
+    //   - metaConnection: map
+    //       - encryptedAccessToken: string (SERVER-ONLY; client read/write/modify strictly blocked)
+    //       - tokenExpiresAt: timestamp (SERVER-ONLY; client write/modify blocked)
+    //       - selectedAdAccountId: string (client-writable, 1..128 chars)
+    //       - selectedFacebookPageId: string (client-writable, 1..128 chars)
+    //   - guardrails: map (client-writable)
+    //       - isAutopilotEnabled: bool
+    //       - isOrganicAutoPostEnabled: bool
+    //       - dailySpendCap: number (>= 0)
+    //       - targetCpa: number (>= 0)
+    //       - minRoas: number (>= 0)
+    //       - evaluationWindowHours: number (1..720)
+    //
+    // Subcollection: users/{userId}/brands/{brandId}
+    // Fields:
+    //   - productUrl: string (http/https URL, <= 2048 chars)
+    //   - brandName: string (1..200 chars)
+    //   - brandColors: list | map (optional)
+    //   - corePainPoints: list (optional, <= 30 items)
+    //   - uniqueSellingPoints: list (optional, <= 30 items)
+    //   - extractedReviews: list (optional, <= 50 items)
+    //   - recommendedTargetAudience: string (optional, <= 2000 chars)
+    //   - toneOfVoice: string (optional, <= 500 chars)
+    //   - createdAt: timestamp (optional, immutable on update)
+    //   - updatedAt: timestamp (optional)
+    //
+    // Subcollection: users/{userId}/campaigns/{campaignId}
+    // Fields:
+    //   - metaCampaignId: string (1..128 chars)
+    //   - metaAdSetId: string (1..128 chars)
+    //   - productUrl: string (http/https URL, <= 2048 chars)
+    //   - status: "active" | "paused" | "emergency_paused" | "paused_by_cap"
+    //   - pauseReason: string (optional, <= 256 chars)
+    //   - budget: number (>= 0)
+    //   - createdAt: timestamp (optional, immutable on update)
+    //   - updatedAt: timestamp (optional)
+    //
+    // Subcollection: users/{userId}/creatives/{creativeId}
+    // Fields:
+    //   - campaignId: string (1..128 chars)
+    //   - metaAdId: string | null (<= 128 chars)
+    //   - metaCreativeId: string | null (optional, <= 128 chars)
+    //   - hook: string (<= 500 chars)
+    //   - primaryText: string (<= 5000 chars)
+    //   - headline: string (<= 500 chars)
+    //   - imagePrompt: string (<= 4000 chars)
+    //   - angle: string (<= 500 chars)
+    //   - criticScore: number (0..100)
+    //   - criticFeedback: list (optional, <= 20 items)
+    //   - mediaUrl: string (optional, http/https URL, <= 2048 chars)
+    //   - videoUrl: string (optional, http/https URL, <= 2048 chars)
+    //   - status: "generated" | "needs_review" | "pending_approval" | "live" | "killed"
+    //   - isOrganicPosted: bool (optional)
+    //   - organicPostId: string (optional, <= 128 chars)
+    //   - metrics: map (optional)
+    //   - createdAt: timestamp (optional, immutable on update)
+    //   - publishedAt: timestamp (optional)
+    //   - updatedAt: timestamp (optional)
+    //
+    // Collection: competitorAds/{adId}
+    //   - Read-only for authenticated users; writes restricted to Admin SDK.
+    //
+    // Collection: systemConfig/{docId}
+    //   - Read-only for authenticated users; writes restricted to Admin SDK.
+    //
+    // ===============================================================
+
+    // ===============================================================
+    // Helper Functions
+    // ===============================================================
+
+    function isAuthenticated() {
+      return request.auth != null;
+    }
+
+    function isOwner(userId) {
+      return isAuthenticated() && request.auth.uid == userId;
+    }
+
+    function isValidNonEmptyString(val, minLen, maxLen) {
+      return val is string && val.size() >= minLen && val.size() <= maxLen;
+    }
+
+    function isValidOptionalStringValue(val, maxLen) {
+      return val is string && val.size() <= maxLen;
+    }
+
+    function isValidUrl(url) {
+      return url is string &&
+        url.size() <= 2048 &&
+        (url.matches("^https://.*") || url.matches("^http://.*"));
+    }
+
+    function isValidList(listVal, maxSize) {
+      return listVal is list && listVal.size() <= maxSize;
+    }
+
+    function isNonNegativeNumber(val, maxVal) {
+      return val is number && val >= 0 && val <= maxVal;
+    }
+
+    function areImmutableFieldsUnchanged(fields) {
+      return !request.resource.data.diff(resource.data).affectedKeys().hasAny(fields);
+    }
+
+    // ===============================================================
+    // Domain Validators: users/{userId}
+    // ===============================================================
+
+    function isValidGuardrails(g) {
+      return g is map &&
+        g.keys().hasOnly([
+          'isAutopilotEnabled',
+          'isOrganicAutoPostEnabled',
+          'dailySpendCap',
+          'targetCpa',
+          'minRoas',
+          'evaluationWindowHours'
+        ]) &&
+        (!('isAutopilotEnabled' in g) || g.isAutopilotEnabled is bool) &&
+        (!('isOrganicAutoPostEnabled' in g) || g.isOrganicAutoPostEnabled is bool) &&
+        (!('dailySpendCap' in g) || isNonNegativeNumber(g.dailySpendCap, 100000000)) &&
+        (!('targetCpa' in g) || isNonNegativeNumber(g.targetCpa, 100000000)) &&
+        (!('minRoas' in g) || isNonNegativeNumber(g.minRoas, 1000)) &&
+        (!('evaluationWindowHours' in g) ||
+          (g.evaluationWindowHours is number &&
+           g.evaluationWindowHours >= 1 &&
+           g.evaluationWindowHours <= 720));
+    }
+
+    // Used when creating metaConnection from the client (either on user doc create,
+    // or when metaConnection did not previously exist on the user doc).
+    // Strictly forbids encryptedAccessToken, tokenExpiresAt, or any other keys.
+    function isValidClientMetaConnectionCreate(mc) {
+      return mc is map &&
+        mc.keys().hasOnly(['selectedAdAccountId', 'selectedFacebookPageId']) &&
+        (!('selectedAdAccountId' in mc) || isValidNonEmptyString(mc.selectedAdAccountId, 1, 128)) &&
+        (!('selectedFacebookPageId' in mc) || isValidNonEmptyString(mc.selectedFacebookPageId, 1, 128));
+    }
+
+    // Used when metaConnection already exists on resource.data (e.g., Cloud Function
+    // already stored encryptedAccessToken / tokenExpiresAt). Ensures the client can ONLY
+    // modify selectedAdAccountId and selectedFacebookPageId, leaving encryptedAccessToken
+    // and tokenExpiresAt untouched.
+    function isValidClientMetaConnectionUpdate(newMc, oldMc) {
+      return newMc is map &&
+        oldMc is map &&
+        newMc.diff(oldMc).affectedKeys().hasOnly(['selectedAdAccountId', 'selectedFacebookPageId']) &&
+        (!('selectedAdAccountId' in newMc.diff(oldMc).affectedKeys()) ||
+          ('selectedAdAccountId' in newMc && isValidNonEmptyString(newMc.selectedAdAccountId, 1, 128))) &&
+        (!('selectedFacebookPageId' in newMc.diff(oldMc).affectedKeys()) ||
+          ('selectedFacebookPageId' in newMc && isValidNonEmptyString(newMc.selectedFacebookPageId, 1, 128)));
+    }
+
+    function isValidUserCreate(data) {
+      return data.keys().hasOnly(['guardrails', 'metaConnection']) &&
+        data.keys().size() > 0 &&
+        (!('guardrails' in data) || isValidGuardrails(data.guardrails)) &&
+        (!('metaConnection' in data) || isValidClientMetaConnectionCreate(data.metaConnection));
+    }
+
+    function isValidUserUpdate(newData, oldData) {
+      let changedKeys = newData.diff(oldData).affectedKeys();
+      return changedKeys.hasOnly(['guardrails', 'metaConnection']) &&
+        (!('guardrails' in changedKeys) ||
+          ('guardrails' in newData && isValidGuardrails(newData.guardrails))) &&
+        (!('metaConnection' in changedKeys) ||
+          ('metaConnection' in newData &&
+            (('metaConnection' in oldData)
+              ? isValidClientMetaConnectionUpdate(newData.metaConnection, oldData.metaConnection)
+              : isValidClientMetaConnectionCreate(newData.metaConnection))));
+    }
+
+    // ===============================================================
+    // Domain Validators: users/{userId}/brands/{brandId}
+    // ===============================================================
+
+    function isValidBrandData(data) {
+      return data.keys().hasOnly([
+          'productUrl',
+          'brandName',
+          'brandColors',
+          'corePainPoints',
+          'uniqueSellingPoints',
+          'extractedReviews',
+          'recommendedTargetAudience',
+          'toneOfVoice',
+          'createdAt',
+          'updatedAt'
+        ]) &&
+        (!('productUrl' in data) || isValidUrl(data.productUrl)) &&
+        (!('brandName' in data) || isValidNonEmptyString(data.brandName, 1, 200)) &&
+        (!('brandColors' in data) || data.brandColors is map || isValidList(data.brandColors, 20)) &&
+        (!('corePainPoints' in data) || isValidList(data.corePainPoints, 30)) &&
+        (!('uniqueSellingPoints' in data) || isValidList(data.uniqueSellingPoints, 30)) &&
+        (!('extractedReviews' in data) || isValidList(data.extractedReviews, 50)) &&
+        (!('recommendedTargetAudience' in data) || isValidOptionalStringValue(data.recommendedTargetAudience, 2000)) &&
+        (!('toneOfVoice' in data) || isValidOptionalStringValue(data.toneOfVoice, 500)) &&
+        (!('createdAt' in data) || data.createdAt is timestamp) &&
+        (!('updatedAt' in data) || data.updatedAt is timestamp);
+    }
+
+    function isValidBrandUpdate(newData, oldData) {
+      return isValidBrandData(newData) &&
+        (!('createdAt' in oldData) ||
+          ('createdAt' in newData && newData.createdAt == oldData.createdAt));
+    }
+
+    // ===============================================================
+    // Domain Validators: users/{userId}/campaigns/{campaignId}
+    // ===============================================================
+
+    function isValidCampaignData(data) {
+      return data.keys().hasOnly([
+          'metaCampaignId',
+          'metaAdSetId',
+          'productUrl',
+          'status',
+          'pauseReason',
+          'budget',
+          'createdAt',
+          'updatedAt'
+        ]) &&
+        data.keys().hasAll(['metaCampaignId', 'metaAdSetId', 'productUrl', 'status', 'budget']) &&
+        isValidNonEmptyString(data.metaCampaignId, 1, 128) &&
+        isValidNonEmptyString(data.metaAdSetId, 1, 128) &&
+        isValidUrl(data.productUrl) &&
+        data.status in ['active', 'paused', 'emergency_paused', 'paused_by_cap'] &&
+        (!('pauseReason' in data) || isValidOptionalStringValue(data.pauseReason, 256)) &&
+        isNonNegativeNumber(data.budget, 100000000) &&
+        (!('createdAt' in data) || data.createdAt is timestamp) &&
+        (!('updatedAt' in data) || data.updatedAt is timestamp);
+    }
+
+    function isValidCampaignUpdate(newData, oldData) {
+      return isValidCampaignData(newData) &&
+        (!('createdAt' in oldData) ||
+          ('createdAt' in newData && newData.createdAt == oldData.createdAt));
+    }
+
+    // ===============================================================
+    // Domain Validators: users/{userId}/creatives/{creativeId}
+    // ===============================================================
+
+    function isValidCreativeMetrics(m) {
+      return m is map &&
+        m.keys().hasOnly(['spend', 'impressions', 'clicks', 'conversions', 'cpa', 'roas']) &&
+        (!('spend' in m) || isNonNegativeNumber(m.spend, 1000000000)) &&
+        (!('impressions' in m) || isNonNegativeNumber(m.impressions, 10000000000)) &&
+        (!('clicks' in m) || isNonNegativeNumber(m.clicks, 10000000000)) &&
+        (!('conversions' in m) || isNonNegativeNumber(m.conversions, 1000000000)) &&
+        (!('cpa' in m) || isNonNegativeNumber(m.cpa, 1000000000)) &&
+        (!('roas' in m) || isNonNegativeNumber(m.roas, 100000));
+    }
+
+    function isValidCreativeData(data) {
+      return data.keys().hasOnly([
+          'campaignId',
+          'metaAdId',
+          'metaCreativeId',
+          'hook',
+          'primaryText',
+          'headline',
+          'imagePrompt',
+          'angle',
+          'criticScore',
+          'criticFeedback',
+          'mediaUrl',
+          'videoUrl',
+          'status',
+          'isOrganicPosted',
+          'organicPostId',
+          'metrics',
+          'createdAt',
+          'publishedAt',
+          'updatedAt'
+        ]) &&
+        data.keys().hasAll(['campaignId', 'hook', 'primaryText', 'headline', 'status']) &&
+        isValidNonEmptyString(data.campaignId, 1, 128) &&
+        (!('metaAdId' in data) || data.metaAdId == null || isValidNonEmptyString(data.metaAdId, 1, 128)) &&
+        (!('metaCreativeId' in data) || data.metaCreativeId == null || isValidNonEmptyString(data.metaCreativeId, 1, 128)) &&
+        isValidOptionalStringValue(data.hook, 500) &&
+        isValidOptionalStringValue(data.primaryText, 5000) &&
+        isValidOptionalStringValue(data.headline, 500) &&
+        (!('imagePrompt' in data) || isValidOptionalStringValue(data.imagePrompt, 4000)) &&
+        (!('angle' in data) || isValidOptionalStringValue(data.angle, 500)) &&
+        (!('criticScore' in data) || (data.criticScore is number && data.criticScore >= 0 && data.criticScore <= 100)) &&
+        (!('criticFeedback' in data) || isValidList(data.criticFeedback, 20)) &&
+        (!('mediaUrl' in data) || isValidUrl(data.mediaUrl)) &&
+        (!('videoUrl' in data) || isValidUrl(data.videoUrl)) &&
+        data.status in ['generated', 'needs_review', 'pending_approval', 'live', 'killed'] &&
+        (!('isOrganicPosted' in data) || data.isOrganicPosted is bool) &&
+        (!('organicPostId' in data) || isValidOptionalStringValue(data.organicPostId, 128)) &&
+        (!('metrics' in data) || isValidCreativeMetrics(data.metrics)) &&
+        (!('createdAt' in data) || data.createdAt is timestamp) &&
+        (!('publishedAt' in data) || data.publishedAt is timestamp) &&
+        (!('updatedAt' in data) || data.updatedAt is timestamp);
+    }
+
+    function isValidCreativeUpdate(newData, oldData) {
+      return isValidCreativeData(newData) &&
+        (!('createdAt' in oldData) ||
+          ('createdAt' in newData && newData.createdAt == oldData.createdAt));
+    }
+
+    // ===============================================================
+    // Collection Rules
+    // ===============================================================
+
+    match /users/{userId} {
+      allow read: if isOwner(userId);
+      allow create: if isOwner(userId) && isValidUserCreate(request.resource.data);
+      allow update: if isOwner(userId) && isValidUserUpdate(request.resource.data, resource.data);
+      allow delete: if false;
+
+      match /brands/{brandId} {
+        allow read: if isOwner(userId);
+        allow create: if isOwner(userId) && isValidBrandData(request.resource.data);
+        allow update: if isOwner(userId) && isValidBrandUpdate(request.resource.data, resource.data);
+        allow delete: if isOwner(userId);
+      }
+
+      match /campaigns/{campaignId} {
+        allow read: if isOwner(userId);
+        allow create: if isOwner(userId) && isValidCampaignData(request.resource.data);
+        allow update: if isOwner(userId) && isValidCampaignUpdate(request.resource.data, resource.data);
+        allow delete: if isOwner(userId);
+      }
+
+      match /creatives/{creativeId} {
+        allow read: if isOwner(userId);
+        allow create: if isOwner(userId) && isValidCreativeData(request.resource.data);
+        allow update: if isOwner(userId) && isValidCreativeUpdate(request.resource.data, resource.data);
+        allow delete: if isOwner(userId);
+      }
+    }
+
+    match /competitorAds/{adId} {
+      allow read: if isAuthenticated();
+      allow write: if false;
+    }
+
+    match /systemConfig/{docId} {
+      allow read: if isAuthenticated();
+      allow write: if false;
+    }
+
+    // Default deny all other paths
+    match /{document=**} {
+      allow read, write: if false;
+    }
+  }
+}
